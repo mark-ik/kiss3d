@@ -1233,6 +1233,7 @@ impl Drop for Window {
 
             // Clear 3D resource managers
             WindowCache::reset();
+            crate::builtin::deform::reset_globals();
 
             // Clear 2D resource managers
             MeshManager2d::reset_global_manager();

@@ -155,6 +155,11 @@ impl DeformGlobals {
     }
 }
 
+/// Drops the shared deform resources, which belong to the current device.
+pub(crate) fn reset_globals() {
+    GLOBALS.with(|cell| *cell.borrow_mut() = None);
+}
+
 fn with_globals<R>(f: impl FnOnce(&DeformGlobals) -> R) -> R {
     GLOBALS.with(|cell| {
         if cell.borrow().is_none() {
