@@ -26,7 +26,9 @@ impl Window {
     ///
     /// The window takes the target's size. The target must be single-sampled,
     /// carry `RENDER_ATTACHMENT`, and have the current context's
-    /// `surface_format`. Readback, recording, timestamps and pacing are the
+    /// `surface_format` or its sRGB form. The tonemap encodes gamma itself,
+    /// so an sRGB target is drawn through its linear view and must list the
+    /// linear format in its `view_formats`. Readback, recording, timestamps and pacing are the
     /// caller's: the target is never copied and the call never waits.
     /// Uniforms go through `Queue::write_buffer`, which lands at the next
     /// submit, so submit each frame's encoder before recording another.
@@ -43,7 +45,12 @@ impl Window {
         post_processing: &mut [&mut dyn PostProcessingEffect],
     ) -> CallerFrame {
         let ctxt = Context::get();
-        assert_eq!(target.format(), ctxt.surface_format, "caller target format");
+        let format = ctxt.surface_format;
+        assert_eq!(
+            target.format().remove_srgb_suffix(),
+            format,
+            "caller target format"
+        );
         assert_eq!(target.sample_count(), 1, "caller target sample count");
         let (w, h) = (target.width(), target.height());
         if self.canvas.size() != (w, h) {
@@ -51,7 +58,10 @@ impl Window {
         }
         let placeholder = ctxt.create_command_encoder(Some("kiss3d_caller_placeholder"));
         self.caller_encoder = Some(std::mem::replace(encoder, placeholder));
-        self.caller_target = Some(target.create_view(&wgpu::TextureViewDescriptor::default()));
+        self.caller_target = Some(target.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(format),
+            ..Default::default()
+        }));
         let before = Context::submission_count();
         let frame = self.render_chain(scene, None, Some(camera), None, None, post_processing);
         let open = poll_once(frame);
