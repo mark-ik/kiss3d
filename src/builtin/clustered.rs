@@ -65,6 +65,8 @@ struct ClusterUniforms {
 pub(crate) struct Clustered {
     /// Number of `GpuLight`s the `clustered_lights` buffer can currently hold.
     light_capacity: u32,
+    /// Lights written by the last `run`.
+    light_count: u32,
     /// All clustered (overflow) lights for the frame, std430 `array<GpuLight>`.
     clustered_lights: wgpu::Buffer,
     /// Per-cluster view-space AABBs, written by the build pass.
@@ -150,6 +152,7 @@ impl Clustered {
 
         Clustered {
             light_capacity: 1,
+            light_count: 0,
             clustered_lights,
             cluster_aabbs,
             cluster_grid,
@@ -178,6 +181,11 @@ impl Clustered {
     /// The clustered-light storage buffer (bound by the object material fragment shader).
     pub(crate) fn lights_buffer(&self) -> &wgpu::Buffer {
         &self.clustered_lights
+    }
+
+    /// Lights in `lights_buffer` from the last frame.
+    pub(crate) fn light_count(&self) -> u32 {
+        self.light_count
     }
 
     /// The per-cluster light-grid buffer (bound by the object material fragment shader).
@@ -228,6 +236,7 @@ impl Clustered {
 
         let (_primary, clustered) = lights.split_primary_clustered();
         let num = clustered.len() as u32;
+        self.light_count = num;
         let realloc = self.ensure_light_capacity(&ctxt, num.max(1));
 
         // Upload the clustered lights (overflow point/spot lights), stamping each

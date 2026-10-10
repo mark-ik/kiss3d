@@ -11,6 +11,7 @@ mod events;
 mod inspector;
 #[cfg(target_os = "ios")]
 mod ios;
+mod light_exports;
 mod offscreen;
 #[cfg(feature = "recording")]
 mod recording;
@@ -26,6 +27,7 @@ pub use canvas::{Canvas, CanvasSetup, NumSamples};
 pub use inspector::{Inspector, InspectorTab};
 #[cfg(target_os = "ios")]
 pub use ios::run_ios;
+pub use light_exports::{LightExports, LIGHT_EXPORTS_WGSL};
 pub use offscreen::OffscreenSurface;
 #[cfg(feature = "recording")]
 pub use recording::RecordingConfig;
