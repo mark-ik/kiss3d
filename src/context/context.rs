@@ -31,6 +31,25 @@ pub struct Context {
     pub adapter: Arc<wgpu::Adapter>,
     /// The preferred texture format for the surface.
     pub surface_format: wgpu::TextureFormat,
+    /// The device belongs to the caller (see [`Context::from_host`]): kiss3d
+    /// never destroys it.
+    host_owned: bool,
+}
+
+/// Keeps a [`Context`] current on this thread; dropping it restores the
+/// previous one. Returned by [`Context::enter`].
+#[must_use = "the context is current only while the scope lives"]
+pub struct ContextScope {
+    previous: Option<Context>,
+    // Thread-bound: the slot it restores is this thread's.
+    _not_send: std::marker::PhantomData<*const ()>,
+}
+
+impl Drop for ContextScope {
+    fn drop(&mut self) {
+        let previous = self.previous.take();
+        CONTEXT_SINGLETON.with(|cell| *cell.borrow_mut() = previous);
+    }
 }
 
 impl Context {
@@ -59,8 +78,65 @@ impl Context {
                 queue: Arc::new(queue),
                 adapter: Arc::new(adapter),
                 surface_format,
+                host_owned: false,
             });
         });
+    }
+
+    /// A handle over a device the caller owns, with no window.
+    ///
+    /// Nothing is installed: make it current with [`Context::enter`].
+    /// `target_format` is the format of the caller's colour targets; the
+    /// tonemap pass writes it. kiss3d never destroys a host-owned device.
+    pub fn from_host(
+        instance: wgpu::Instance,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        adapter: wgpu::Adapter,
+        target_format: wgpu::TextureFormat,
+    ) -> Context {
+        Context {
+            instance: Arc::new(instance),
+            device: Arc::new(device),
+            queue: Arc::new(queue),
+            adapter: Arc::new(adapter),
+            surface_format: target_format,
+            host_owned: true,
+        }
+    }
+
+    /// Makes this handle the context kiss3d draws with on this thread
+    /// until the returned scope drops.
+    ///
+    /// # Panics
+    /// If another device is current while windows or surfaces built on it
+    /// are alive: kiss3d's resource managers are per thread and hold that
+    /// device's resources.
+    pub fn enter(&self) -> ContextScope {
+        let previous = CONTEXT_SINGLETON.with(|cell| {
+            let mut slot = cell.borrow_mut();
+            if let Some(current) = slot.as_ref() {
+                assert!(
+                    *current.device == *self.device || Self::window_count() == 0,
+                    "kiss3d: another device is current with live windows on this thread"
+                );
+            }
+            slot.replace(self.clone())
+        });
+        ContextScope {
+            previous,
+            _not_send: std::marker::PhantomData,
+        }
+    }
+
+    /// The context current on this thread, if any.
+    pub fn current() -> Option<Context> {
+        CONTEXT_SINGLETON.with(|cell| cell.borrow().clone())
+    }
+
+    /// Whether the device belongs to the caller rather than to kiss3d.
+    pub fn is_host_owned(&self) -> bool {
+        self.host_owned
     }
 
     /// Gets a clone of the global wgpu context.
@@ -94,7 +170,7 @@ impl Context {
             // This ensures WebGPU resources are released immediately rather than
             // waiting for garbage collection, which is important for browsers
             // that limit the number of concurrent WebGPU contexts.
-            if let Some(ctx) = cell.borrow().as_ref() {
+            if let Some(ctx) = cell.borrow().as_ref().filter(|ctx| !ctx.host_owned) {
                 ctx.device.destroy();
             }
             *cell.borrow_mut() = None;
