@@ -110,6 +110,8 @@ pub struct Window {
     /// Offscreen render target used when the window is hidden, so `snap` and
     /// recording work without a presentable surface. Created on first use.
     pub(super) offscreen_output_target: Option<RenderTarget>,
+    /// A caller's colour target this frame renders into instead of its own.
+    pub(super) caller_target: Option<wgpu::TextureView>,
     /// Renderer for auxiliary outputs (depth, normals, segmentation). Created
     /// on first use of an AOV-producing method.
     pub(super) aov_renderer: Option<crate::builtin::AovRenderer>,
@@ -1100,6 +1102,7 @@ impl Window {
             post_process_render_target_b: framebuffer_manager
                 .new_render_target(width, height, false),
             offscreen_output_target: None,
+            caller_target: None,
             aov_renderer: None,
             hidden: hide,
             shadow_mapper: ShadowMapper::new(DEFAULT_SHADOW_RESOLUTION),
@@ -1136,6 +1139,19 @@ impl Window {
     ) -> Window {
         let (event_send, event_receive) = mpsc::channel();
         let canvas = Canvas::open_headless(width, height, setup, event_send).await;
+        Self::headless_from_canvas(canvas, event_receive)
+    }
+
+    /// A headless window on the context current on this thread (see
+    /// [`Context::enter`]): no OS window, no surface, no device of its own.
+    /// Draw it into caller targets with [`Window::render_into`].
+    pub fn new_on_context(width: u32, height: u32, setup: CanvasSetup) -> Window {
+        let (event_send, event_receive) = mpsc::channel();
+        let canvas = Canvas::headless_on_context(width, height, Some(setup), event_send);
+        Self::headless_from_canvas(canvas, event_receive)
+    }
+
+    fn headless_from_canvas(canvas: Canvas, event_receive: Receiver<WindowEvent>) -> Window {
         let (width, height) = canvas.size();
         let canvas_surface_format = canvas.surface_format();
         let sample_count = canvas.sample_count();
@@ -1186,6 +1202,7 @@ impl Window {
             post_process_render_target_b: framebuffer_manager
                 .new_render_target(width, height, false),
             offscreen_output_target: None,
+            caller_target: None,
             aov_renderer: None,
             // A headless window has no surface; always render off-screen.
             hidden: true,

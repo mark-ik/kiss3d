@@ -263,7 +263,7 @@ impl Window {
             .resize(w, h, self.canvas.surface_format());
         self.post_process_render_target_b
             .resize(w, h, self.canvas.surface_format());
-        if offscreen {
+        if offscreen && self.caller_target.is_none() {
             if self.offscreen_output_target.is_none() {
                 self.offscreen_output_target =
                     Some(self.framebuffer_manager.new_render_target(w, h, true));
@@ -281,6 +281,7 @@ impl Window {
             Some(frame) => frame
                 .texture
                 .create_view(&wgpu::TextureViewDescriptor::default()),
+            None if self.caller_target.is_some() => self.caller_target.clone().unwrap(),
             None => self
                 .offscreen_output_target
                 .as_ref()
@@ -1261,6 +1262,8 @@ impl Window {
         // `snap_rect` and recording can read it back.
         match &frame {
             Some(frame) => self.canvas.copy_frame_to_readback(frame),
+            // The caller owns its target and reads it back itself.
+            None if self.caller_target.is_some() => {}
             None => {
                 let color = self
                     .offscreen_output_target
@@ -1296,8 +1299,9 @@ impl Window {
             gpu_steps: self.gpu_timer.last(),
         });
 
+        // A caller drawing into its own targets paces its own frames.
         #[cfg(target_arch = "wasm32")]
-        {
+        if self.caller_target.is_none() {
             use wasm_bindgen::JsCast;
             use web_sys::wasm_bindgen::closure::Closure;
 
@@ -1318,7 +1322,9 @@ impl Window {
         // future is polled once per winit loop turn (see `window::ios`), so
         // yielding here paces the render loop to one frame per turn.
         #[cfg(target_os = "ios")]
-        super::ios::next_frame().await;
+        if self.caller_target.is_none() {
+            super::ios::next_frame().await;
+        }
 
         !self.should_close()
     }
@@ -1377,7 +1383,7 @@ impl Window {
 
         // The path tracer renders single-sampled into an offscreen color texture
         // when the window is hidden; otherwise straight into the surface.
-        if offscreen {
+        if offscreen && self.caller_target.is_none() {
             if self.offscreen_output_target.is_none() {
                 self.offscreen_output_target =
                     Some(self.framebuffer_manager.new_render_target(w, h, true));
@@ -1393,6 +1399,7 @@ impl Window {
             Some(frame) => frame
                 .texture
                 .create_view(&wgpu::TextureViewDescriptor::default()),
+            None if self.caller_target.is_some() => self.caller_target.clone().unwrap(),
             None => self
                 .offscreen_output_target
                 .as_ref()
@@ -1510,6 +1517,8 @@ impl Window {
 
         match &frame {
             Some(frame) => self.canvas.copy_frame_to_readback(frame),
+            // The caller owns its target and reads it back itself.
+            None if self.caller_target.is_some() => {}
             None => {
                 let color = self
                     .offscreen_output_target
@@ -1540,8 +1549,9 @@ impl Window {
             gpu_steps: self.gpu_timer.last(),
         });
 
+        // A caller drawing into its own targets paces its own frames.
         #[cfg(target_arch = "wasm32")]
-        {
+        if self.caller_target.is_none() {
             use wasm_bindgen::JsCast;
             use web_sys::wasm_bindgen::closure::Closure;
 
@@ -1557,7 +1567,9 @@ impl Window {
 
         // Same pacing as the rasterizer path: one frame per winit loop turn.
         #[cfg(target_os = "ios")]
-        super::ios::next_frame().await;
+        if self.caller_target.is_none() {
+            super::ios::next_frame().await;
+        }
 
         !self.should_close()
     }

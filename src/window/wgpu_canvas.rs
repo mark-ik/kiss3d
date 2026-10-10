@@ -934,15 +934,12 @@ impl WgpuCanvas {
         canvas_setup: Option<CanvasSetup>,
         out_events: Sender<WindowEvent>,
     ) -> Self {
-        let canvas_setup = canvas_setup.unwrap_or_default();
-        let width = width.max(1);
-        let height = height.max(1);
-
         // Reuse the wgpu context if one already exists (e.g. a window was
         // created first); otherwise create a surface-less one.
-        let surface_format = if Context::is_initialized() {
-            Context::get().surface_format
-        } else {
+        if !Context::is_initialized() {
+            let required = canvas_setup
+                .as_ref()
+                .map_or(wgpu::Features::empty(), |s| s.required_features);
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
                 backends: wgpu::Backends::all(),
                 ..wgpu::InstanceDescriptor::new_without_display_handle()
@@ -958,7 +955,7 @@ impl WgpuCanvas {
                 .await
                 .expect("Failed to find an appropriate adapter");
 
-            let required_features = device_features(&adapter, canvas_setup.required_features);
+            let required_features = device_features(&adapter, required);
             let (device, queue) = adapter
                 .request_device(&wgpu::DeviceDescriptor {
                     label: Some("kiss3d headless device"),
@@ -978,10 +975,23 @@ impl WgpuCanvas {
             // supported non-sRGB format (gamma is handled in shaders).
             let surface_format = wgpu::TextureFormat::Rgba8Unorm;
             Context::init(instance, device, queue, adapter, surface_format);
-            surface_format
-        };
+        }
+        Self::headless_on_context(width, height, canvas_setup, out_events)
+    }
 
+    /// A headless canvas on the context current on this thread, which
+    /// must exist (see [`Context::enter`]).
+    pub fn headless_on_context(
+        width: u32,
+        height: u32,
+        canvas_setup: Option<CanvasSetup>,
+        out_events: Sender<WindowEvent>,
+    ) -> Self {
+        let canvas_setup = canvas_setup.unwrap_or_default();
+        let width = width.max(1);
+        let height = height.max(1);
         let ctxt = Context::get();
+        let surface_format = ctxt.surface_format;
         let sample_count = canvas_setup.samples as u32;
 
         // Kept only to carry the size and format; no surface is configured.

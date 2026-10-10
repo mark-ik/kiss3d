@@ -95,6 +95,18 @@ impl Canvas {
         }
     }
 
+    /// A headless canvas on the context current on this thread.
+    pub fn headless_on_context(
+        width: u32,
+        height: u32,
+        canvas_setup: Option<CanvasSetup>,
+        out_events: Sender<WindowEvent>,
+    ) -> Self {
+        Canvas {
+            canvas: WgpuCanvas::headless_on_context(width, height, canvas_setup, out_events),
+        }
+    }
+
     /// Poll all events that occurred since the last call to this method.
     pub fn poll_events(&mut self) {
         self.canvas.poll_events()
