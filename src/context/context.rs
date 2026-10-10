@@ -13,6 +13,8 @@ thread_local! {
     static CONTEXT_SINGLETON: RefCell<Option<Context>> = const { RefCell::new(None) };
     // Track number of active windows to know when to reset the context
     static WINDOW_COUNT: Cell<usize> = const { Cell::new(0) };
+    // Queue submissions made through any context on this thread.
+    static SUBMISSIONS: Cell<u64> = const { Cell::new(0) };
 }
 
 /// The wgpu rendering context containing all GPU resources needed for rendering.
@@ -132,6 +134,12 @@ impl Context {
     /// The context current on this thread, if any.
     pub fn current() -> Option<Context> {
         CONTEXT_SINGLETON.with(|cell| cell.borrow().clone())
+    }
+
+    /// Queue submissions kiss3d has made on this thread, for callers that
+    /// require a frame to make none of its own.
+    pub fn submission_count() -> u64 {
+        SUBMISSIONS.with(|n| n.get())
     }
 
     /// Whether the device belongs to the caller rather than to kiss3d.
@@ -351,6 +359,7 @@ impl Context {
     /// # Arguments
     /// * `command_buffers` - Iterator of command buffers to submit
     pub fn submit<I: IntoIterator<Item = wgpu::CommandBuffer>>(&self, command_buffers: I) {
+        SUBMISSIONS.with(|n| n.set(n.get() + 1));
         self.queue.submit(command_buffers);
     }
 
@@ -361,6 +370,7 @@ impl Context {
         &self,
         command_buffers: I,
     ) -> wgpu::SubmissionIndex {
+        SUBMISSIONS.with(|n| n.set(n.get() + 1));
         self.queue.submit(command_buffers)
     }
 

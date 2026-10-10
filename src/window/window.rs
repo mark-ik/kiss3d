@@ -112,6 +112,8 @@ pub struct Window {
     pub(super) offscreen_output_target: Option<RenderTarget>,
     /// A caller's colour target this frame renders into instead of its own.
     pub(super) caller_target: Option<wgpu::TextureView>,
+    /// A caller's encoder the frame records into instead of submitting.
+    pub(super) caller_encoder: Option<wgpu::CommandEncoder>,
     /// A caller's depth the frame starts from instead of a clear.
     pub(super) depth_prepass: Option<crate::renderer::DepthPrepass>,
     /// Renderer for auxiliary outputs (depth, normals, segmentation). Created
@@ -1105,6 +1107,7 @@ impl Window {
                 .new_render_target(width, height, false),
             offscreen_output_target: None,
             caller_target: None,
+            caller_encoder: None,
             depth_prepass: None,
             aov_renderer: None,
             hidden: hide,
@@ -1206,6 +1209,7 @@ impl Window {
                 .new_render_target(width, height, false),
             offscreen_output_target: None,
             caller_target: None,
+            caller_encoder: None,
             depth_prepass: None,
             aov_renderer: None,
             // A headless window has no surface; always render off-screen.

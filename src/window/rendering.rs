@@ -249,7 +249,11 @@ impl Window {
         let sample_count = self.canvas.sample_count();
 
         let ctxt = Context::get();
-        let mut encoder = ctxt.create_command_encoder(Some("kiss3d_frame_encoder"));
+        // A caller's encoder records the frame and the caller submits it.
+        let caller_encoder = self.caller_encoder.take();
+        let for_caller = caller_encoder.is_some();
+        let mut encoder = caller_encoder
+            .unwrap_or_else(|| ctxt.create_command_encoder(Some("kiss3d_frame_encoder")));
 
         // Resize the HDR film + the offscreen render targets if needed.
         //
@@ -1238,13 +1242,20 @@ impl Window {
                 .render(w as f32, h as f32, &mut context_2d_encoder);
         }
 
-        // Resolve the GPU timestamp queries into a readback buffer before submit.
-        self.gpu_timer.resolve(&mut encoder);
+        let cpu_submit = if for_caller {
+            // Unresolved timestamps: the readback map needs the submit.
+            self.caller_encoder = Some(encoder);
+            Default::default()
+        } else {
+            // Resolve the GPU timestamp queries into a readback buffer before submit.
+            self.gpu_timer.resolve(&mut encoder);
 
-        // Submit the main command buffer (CPU-timed) and kick off the async
-        // timestamp readback.
-        let (_, cpu_submit) = CpuTimer::time(|| ctxt.submit(std::iter::once(encoder.finish())));
-        self.gpu_timer.after_submit();
+            // Submit the main command buffer (CPU-timed) and kick off the async
+            // timestamp readback.
+            let (_, cpu_submit) = CpuTimer::time(|| ctxt.submit(std::iter::once(encoder.finish())));
+            self.gpu_timer.after_submit();
+            cpu_submit
+        };
 
         // Render egui if enabled (uses its own command encoder and submits it)
         #[cfg(feature = "egui")]

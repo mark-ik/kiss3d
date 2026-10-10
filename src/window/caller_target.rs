@@ -10,37 +10,60 @@ use crate::post_processing::PostProcessingEffect;
 use crate::scene::SceneNode3d;
 use crate::window::Window;
 
+/// What one [`Window::render_into`] frame did beyond recording.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CallerFrame {
+    /// `false` once the window was asked to close.
+    pub open: bool,
+    /// Queue submissions kiss3d made itself during the frame. Zero unless
+    /// a reflection-probe capture or a planar reflector ran, or egui drew.
+    pub internal_submissions: u64,
+}
+
 impl Window {
-    /// Renders one frame of `scene` into `target`, a caller-owned texture,
-    /// and returns once the frame's commands are submitted.
+    /// Records one frame of `scene` into the caller's `encoder`, drawing
+    /// into `target`, a caller-owned texture. The caller submits.
     ///
     /// The window takes the target's size. The target must be single-sampled,
     /// carry `RENDER_ATTACHMENT`, and have the current context's
-    /// `surface_format`. Readback, recording and frame pacing are the
+    /// `surface_format`. Readback, recording, timestamps and pacing are the
     /// caller's: the target is never copied and the call never waits.
+    /// Uniforms go through `Queue::write_buffer`, which lands at the next
+    /// submit, so submit each frame's encoder before recording another.
     ///
     /// # Panics
     /// If no context is current, if the target's format or sample count
     /// does not match, or if the frame would wait on the platform.
     pub fn render_into(
         &mut self,
+        encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::Texture,
         scene: Option<&mut SceneNode3d>,
         camera: &mut dyn Camera3d,
         post_processing: &mut [&mut dyn PostProcessingEffect],
-    ) -> bool {
-        let format = Context::get().surface_format;
-        assert_eq!(target.format(), format, "caller target format");
+    ) -> CallerFrame {
+        let ctxt = Context::get();
+        assert_eq!(target.format(), ctxt.surface_format, "caller target format");
         assert_eq!(target.sample_count(), 1, "caller target sample count");
         let (w, h) = (target.width(), target.height());
         if self.canvas.size() != (w, h) {
             self.canvas.resize(w, h);
         }
+        let placeholder = ctxt.create_command_encoder(Some("kiss3d_caller_placeholder"));
+        self.caller_encoder = Some(std::mem::replace(encoder, placeholder));
         self.caller_target = Some(target.create_view(&wgpu::TextureViewDescriptor::default()));
+        let before = Context::submission_count();
         let frame = self.render_chain(scene, None, Some(camera), None, None, post_processing);
         let open = poll_once(frame);
         self.caller_target = None;
-        open
+        *encoder = self
+            .caller_encoder
+            .take()
+            .expect("the frame hands the caller's encoder back");
+        CallerFrame {
+            open,
+            internal_submissions: Context::submission_count() - before,
+        }
     }
 }
 
@@ -70,3 +93,7 @@ impl Window {
         self.canvas.depth_view()
     }
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "caller_target_tests.rs"]
+mod tests;

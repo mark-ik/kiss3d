@@ -20,6 +20,7 @@ mod wgpu_canvas;
 mod window;
 mod window_cache;
 
+pub use caller_target::CallerFrame;
 pub use canvas::{Canvas, CanvasSetup, NumSamples};
 #[cfg(feature = "egui")]
 pub use inspector::{Inspector, InspectorTab};
