@@ -1,5 +1,6 @@
 //! Structures responsible for rendering elements other than kiss3d's meshes.
 
+pub use self::depth_prepass::DepthPrepass;
 pub use self::dof::{DepthOfFieldMode, Dof, DofSettings};
 #[cfg(feature = "egui")]
 pub use self::egui_renderer::EguiRenderer;
@@ -21,6 +22,7 @@ pub use self::ssr::{Ssr, SsrMaterial, SsrSettings};
 pub use self::timings::RenderTimings;
 pub use self::transmission::{Transmission, TransmissionBlurQuality, TransmissionSettings};
 
+mod depth_prepass;
 mod dof;
 #[cfg(feature = "egui")]
 mod egui_renderer;

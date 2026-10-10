@@ -338,6 +338,9 @@ impl Window {
             });
             // Render pass is dropped here, ending the clear pass
         }
+        if let Some(prepass) = self.depth_prepass.as_mut() {
+            prepass.encode(&mut encoder, &depth_view, (w, h), sample_count);
+        }
 
         // Signal start of new frame to all materials (for dynamic buffer clearing)
         MaterialManager3d::get_global_manager(|mm| mm.begin_frame());

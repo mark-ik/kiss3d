@@ -52,3 +52,21 @@ fn poll_once<F: Future>(future: F) -> F::Output {
         Poll::Pending => panic!("kiss3d: a caller-target frame waited on the platform"),
     }
 }
+
+impl Window {
+    /// Starts every frame from `depth` instead of a cleared depth buffer,
+    /// or clears again with `None`.
+    ///
+    /// `depth` is `Depth32Float`, single-sampled, `TEXTURE_BINDING`, the
+    /// frame's size, written in the raster's clip space (standard z):
+    /// a tracer's surfaces, so the scene draws only where it is nearer.
+    pub fn set_depth_prepass(&mut self, depth: Option<wgpu::Texture>) {
+        self.depth_prepass = depth.map(crate::renderer::DepthPrepass::new);
+    }
+
+    /// The frame's depth attachment, holding the pre-pass and the scene
+    /// after a frame. Multisampled when the canvas is.
+    pub fn depth_view(&self) -> &wgpu::TextureView {
+        self.canvas.depth_view()
+    }
+}

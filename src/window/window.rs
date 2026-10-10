@@ -112,6 +112,8 @@ pub struct Window {
     pub(super) offscreen_output_target: Option<RenderTarget>,
     /// A caller's colour target this frame renders into instead of its own.
     pub(super) caller_target: Option<wgpu::TextureView>,
+    /// A caller's depth the frame starts from instead of a clear.
+    pub(super) depth_prepass: Option<crate::renderer::DepthPrepass>,
     /// Renderer for auxiliary outputs (depth, normals, segmentation). Created
     /// on first use of an AOV-producing method.
     pub(super) aov_renderer: Option<crate::builtin::AovRenderer>,
@@ -1103,6 +1105,7 @@ impl Window {
                 .new_render_target(width, height, false),
             offscreen_output_target: None,
             caller_target: None,
+            depth_prepass: None,
             aov_renderer: None,
             hidden: hide,
             shadow_mapper: ShadowMapper::new(DEFAULT_SHADOW_RESOLUTION),
@@ -1203,6 +1206,7 @@ impl Window {
                 .new_render_target(width, height, false),
             offscreen_output_target: None,
             caller_target: None,
+            depth_prepass: None,
             aov_renderer: None,
             // A headless window has no surface; always render off-screen.
             hidden: true,
